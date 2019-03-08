@@ -2,8 +2,11 @@
 	<div class="Cities-game">
 		<div class="Cities-game__wrapper">
 			<div class="Cities-game__title">Cities</div>
+
 			<div v-if="stage === 1" class="Cities-game__stage-one">
+
 				<button class="Cities-game__main-button" @click="isPlayersName ? startGame() : toPlayerName()" >{{isPlayersName ? 'Enter Players Names:' : 'Input the quantity:'}}</button>
+				
 				<transition name="fadeRight">
 				<input 
 					v-if="!isPlayersName"
@@ -17,12 +20,13 @@
 						v-model="curPlayer"
 					>
 				</transition>
-				<div class="Cities-game__not-enough" v-if="unableToStart">Not enough players to play!</div>
-				<div class="Cities-game__not-enough" v-if="unablePlayersInput">The length of the name must be higher than 2 and less than 15!</div>
+				
+					<error-message key="error1"  v-if="unableToStart" message="Not enough players to play!"/>
+					<error-message key="error2" v-if="unablePlayersInput" message="The length of the name must be higher than 2 and less than 15!"/>
 
 			</div>
 
-			<div v-if="players.length === playersQuan" class="Cities-game__stage-two">
+			<div v-if="players.length === playersQuan && stage === 2" class="Cities-game__stage-two">
 				<transition name="fadeRight">
 					<div class="Cities-game__transition-wrapper">
 						<div class="Cities-game__current-player">
@@ -44,7 +48,8 @@
 						<!-- </transition> -->
 						<div v-if="curCityName.length" class="Cities-game__city-name">{{curCityName}}</div>	
 						<div v-if="curCityFact.length" class="Cities-game__city-fact">{{curCityFact}}</div>
-						<div class="Cities-game__not-enough" v-if="inputAnotherWarn">Type another city!</div>
+						
+						<error-message  v-if="inputAnotherWarn" message="Type another city!"/>
 					</div>
 				</transition>
 				<div class="Cities-game__city-count">{{cityCount}}</div>
@@ -56,7 +61,16 @@
 					</div>
 				</div>
 			</div>
-			<div v-if="stage == 3" class="Cities-game__stage-three"></div>
+			<div v-if="stage == 3" class="Cities-game__stage-three">
+				<transition name="fadeRight">
+					<div class="Cities-game__transition-wrapper">
+						<div class="Cities-game__game-over"></div>
+						<div class="Cities-game__main-button" @click="toDefault()">Try again?</div>
+						<div class="Cities-game__city-count-end">Num of guessed cities: {{cityCount}}</div>
+						<div class="Cities-game__player-win">The loser is: {{curPlayer}}</div>
+					</div>
+				</transition>
+			</div>
 		</div>
 	</div>
 </template>
@@ -64,6 +78,7 @@
 <script>
 import axios from 'axios'
 import data from './cities'
+import ErrorMessage from './ErrorMessage'
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
 const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList
@@ -73,6 +88,8 @@ const grammar = '#JSGF V1.0; grammar citites; public <city> = ' + data.cities.jo
 
 const recognition = new SpeechRecognition()
 const speechRecognitionList = new SpeechGrammarList()
+
+const PLAYER_TRIES = 2 // it's 3 but, to be more specific, the logic included in the game count 3 as a 4!
 
 speechRecognitionList.addFromString(grammar, 1)
 
@@ -88,10 +105,12 @@ function capitalizeFirstLetter(string) {
 
 export default {
 	name: 'cities-game',
+	components: {
+		ErrorMessage
+	},
 	data() {
 		return {
 			city: '',
-			maxPlayerTries: 3,
 			isPlayersName: false,
 			playersQuan: 2,
 			cityFact: '',
@@ -103,7 +122,7 @@ export default {
 			useMicro: true,
 			playerTurn: 0,
 			usedCities: [],
-			playerTries: this.maxPlayerTries,
+			playerTries: PLAYER_TRIES,
 			inputAnotherWarn: false,
 			curCityFact: '',
 			curCityName: '',
@@ -125,32 +144,36 @@ export default {
 			}
 		},
 		toPlayerName() {
+			this.unableToStart = false
 			if (this.playersQuan < 2) {
 				this.unableToStart = true
 			} else {
-				this.unableToStart = false
 				this.isPlayersName = true
 			}
 		},
 
 		moveToNext(city) {
 			this.inputAnotherWarn = false
-			this.playerTries = this.maxPlayerTries
 			if (data.cities.includes(city)) {
 				if (!this.usedCities.includes(city)) {
+					this.playerTries = PLAYER_TRIES
 					this.getCity(city)
 					this.playerTurn = (this.playerTurn == this.playersQuan - 1 ? 0 : ++this.playerTurn)
 					this.curPlayer = this.players[this.playerTurn]
 					this.usedCities.push(city)
 					this.cityCount++
 				} else {
-					if (this.playerTries) this.playerTries-- 
+					if (this.playerTries) --this.playerTries
 					else {
 						this.stage = 3
 					}
 				}	
 			} else {
 				this.inputAnotherWarn = true
+				if (this.playerTries) --this.playerTries
+				else {
+					this.stage = 3
+				}
 			}
 		},
 
@@ -163,7 +186,6 @@ export default {
 				recognition.onresult = (event) => {
 					const last = event.results.length - 1
 					let trans = event.results[last][0].transcript
-					console.log(trans)
 					this.moveToNext(trans)
 				}
 			}
@@ -184,6 +206,18 @@ export default {
 					this.curCityFact = data.data[2][0]
 				})
 				.catch(err => { throw new Error() })
+		},
+
+		toDefault() {
+			this.city = this.cityFact = this.curPlayer = this.curCityFact = this.curCityName = ''
+			this.inputAnotherWarn = this.isPlayersName = this.unableToStart = this.unablePlayersInput = false
+			this.playerTurn = this.cityCount = 0
+			this.players = [] 
+			this.usedCities = []
+			this.playersQuan = 2
+			this.stage = 1
+			this.useMicro = true
+			this.playerTries = PLAYER_TRIES
 		}
 	}
 }
@@ -192,18 +226,12 @@ export default {
 
 <style lang="sass">
 	$colors: ('#7dce94', '#3d3d3f', '#f6f5f3','#f9f8fd')
-	@keyframes fadeIn
-		0%
-			opacity: 0
-		100%
-			opacity: 1
 	
 	.fadeRight
 		&-enter-active
 			transform: translateX(0)
-			transition: all .5s ease
+			transition: transform .3s ease
 		&-enter
-			opacity: 0
 			transform: translateX(100%)
 	.Cities-game
 		font-family: 'Roboto', sans-serif
@@ -251,14 +279,6 @@ export default {
 			box-shadow: 0 1px 4px #e3e4e9
 			&:active
 				outline: none
-		&__not-enough 
-			padding: 20px
-			color: #DC143C
-			text-align: center
-			font-size: 25px
-			border: 1px solid #DC143C
-			border-radius: 5px
-			margin: 20px 0
 		&__stage
 			&-one
 				display: flex
@@ -374,4 +394,11 @@ export default {
 				background-color: #feda6a
 				border-radius: 50%
 				color: #202020
+		&__city-count-end,
+		&__player-win
+			margin-top: 40px
+			font-size: 20px
+			color: #020202
+		&__player-win
+			margin-top: 25px
 </style>
